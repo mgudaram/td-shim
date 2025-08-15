@@ -175,6 +175,7 @@ pub fn enroll_files(
             IgvmFile::new_from_binary(&tdshim_bin.as_bytes(), None).expect("file parse error");
         let mut cfv_data;
         let mut offset: u64 = 0;
+        let mut pagedataflags;
 
         let cfv_header = build_cfv_header();
         cfv_data = cfv_header.as_bytes().to_vec();
@@ -198,6 +199,7 @@ pub fn enroll_files(
                 ..
             } = dir
             {
+                pagedataflags = *flags;
                 if *gpa >= TD_SHIM_CONFIG_BASE.into()
                     && *gpa < ((TD_SHIM_CONFIG_BASE + TD_SHIM_CONFIG_SIZE).into())
                 {
@@ -212,6 +214,7 @@ pub fn enroll_files(
                                 let paddingbytes = PAGE_SIZE_4K as usize - (end - start);
                                 page_data.extend(std::iter::repeat(0).take(paddingbytes));
                             }
+                            pagedataflags.set_unmeasured(false);
                         } else {
                             page_data = vec![];
                         }
@@ -223,7 +226,7 @@ pub fn enroll_files(
                 directive_headers.push(IgvmDirectiveHeader::PageData {
                     gpa: *gpa,
                     compatibility_mask: *compatibility_mask,
-                    flags: *flags,
+                    flags: pagedataflags,
                     data_type: *data_type,
                     data: page_data.clone(),
                 });
