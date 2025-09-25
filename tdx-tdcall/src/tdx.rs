@@ -11,6 +11,8 @@
 //! TDVMCALL (TDG.VP.VMCALL) is a leaf function 0 for TDCALL. It helps invoke services from
 //! the host VMM.
 
+#[cfg(not(feature = "no-tdvmcall"))]
+use bitfield_struct::bitfield;
 use core::result::Result;
 #[cfg(not(feature = "no-tdvmcall"))]
 use core::sync::atomic::{fence, Ordering};
@@ -19,6 +21,16 @@ use lazy_static::lazy_static;
 use x86_64::registers::rflags::{self, RFlags};
 
 use crate::*;
+
+#[cfg(not(feature = "no-tdvmcall"))]
+#[bitfield(u64)]
+#[derive(PartialEq, Eq)]
+struct MigTdLeaf {
+    migtd_leaffunction: u16,
+    migtd_apiversion: u8,
+    #[bits(40)]
+    reserved: u64,
+}
 
 cfg_if::cfg_if! {
     if #[cfg(not(feature = "no-tdvmcall"))] {
@@ -520,6 +532,10 @@ pub fn tdvmcall_migtd_waitforrequest(
 ) -> Result<(), TdVmcallError> {
     let data_buffer_length = data_buffer.len() as u64;
     let data_buffer = data_buffer.as_mut_ptr() as u64 | *SHARED_MASK;
+    let migtdleafval = MigTdLeaf::new()
+        .with_migtd_leaffunction(TDVMCALL_MIGTD_WAITFORREQUEST)
+        .with_migtd_apiversion(1)
+        .with_reserved(0);
 
     // Ensure the address is aligned to 4K bytes
     if (data_buffer & 0xfff) != 0 {
@@ -533,7 +549,7 @@ pub fn tdvmcall_migtd_waitforrequest(
 
     let mut args = TdVmcallArgs {
         r11: TDVMCALL_MIGTD,
-        r12: TDVMCALL_MIGTD_WAITFORREQUEST,
+        r12: migtdleafval.into(),
         r13: data_buffer_length,
         r14: data_buffer,
         r15: interrupt as u64,
@@ -552,17 +568,22 @@ pub fn tdvmcall_migtd_waitforrequest(
 #[cfg(not(feature = "no-tdvmcall"))]
 pub fn tdvmcall_migtd_reportstatus(
     mig_request_id: u64,
-    pre_migration_status: u8,
+    pre_migration_status: u64,
     data_buffer: &mut [u8],
     interrupt: u8,
 ) -> Result<(), TdVmcallError> {
+    let le_bytes = pre_migration_status.to_le_bytes();
     // Ensure that the pre-migration status is not reserved
-    if (0xb..0xff).contains(&pre_migration_status) {
+    if (0xd..0xff).contains(&le_bytes[1]) {
         return Err(TdVmcallError::VmcallOperandInvalid);
     }
 
     let data_buffer_length = data_buffer.len() as u64;
     let data_buffer = data_buffer.as_mut_ptr() as u64 | *SHARED_MASK;
+    let migtdleafval = MigTdLeaf::new()
+        .with_migtd_leaffunction(TDVMCALL_MIGTD_REPORTSTATUS)
+        .with_migtd_apiversion(1)
+        .with_reserved(0);
 
     // Ensure the address is aligned to 4K bytes
     if (data_buffer & 0xfff) != 0 {
@@ -576,9 +597,9 @@ pub fn tdvmcall_migtd_reportstatus(
 
     let mut args = TdVmcallArgsEx {
         r11: TDVMCALL_MIGTD,
-        r12: TDVMCALL_MIGTD_REPORTSTATUS,
+        r12: migtdleafval.into(),
         r13: mig_request_id,
-        r14: pre_migration_status as u64,
+        r14: pre_migration_status,
         r15: data_buffer_length,
         rbx: data_buffer,
         rdi: interrupt as u64,
@@ -602,6 +623,10 @@ pub fn tdvmcall_migtd_send(
 ) -> Result<(), TdVmcallError> {
     let data_buffer_length = data_buffer.len() as u64;
     let data_buffer = data_buffer.as_mut_ptr() as u64 | *SHARED_MASK;
+    let migtdleafval = MigTdLeaf::new()
+        .with_migtd_leaffunction(TDVMCALL_MIGTD_SEND)
+        .with_migtd_apiversion(1)
+        .with_reserved(0);
 
     // Ensure the address is aligned to 4K bytes
     if (data_buffer & 0xfff) != 0 {
@@ -615,7 +640,7 @@ pub fn tdvmcall_migtd_send(
 
     let mut args = TdVmcallArgsEx {
         r11: TDVMCALL_MIGTD,
-        r12: TDVMCALL_MIGTD_SEND,
+        r12: migtdleafval.into(),
         r13: mig_request_id,
         r14: data_buffer_length,
         r15: data_buffer,
@@ -640,6 +665,10 @@ pub fn tdvmcall_migtd_receive(
 ) -> Result<(), TdVmcallError> {
     let data_buffer_length = data_buffer.len() as u64;
     let data_buffer = data_buffer.as_mut_ptr() as u64 | *SHARED_MASK;
+    let migtdleafval = MigTdLeaf::new()
+        .with_migtd_leaffunction(TDVMCALL_MIGTD_RECEIVE)
+        .with_migtd_apiversion(1)
+        .with_reserved(0);
 
     // Ensure the address is aligned to 4K bytes
     if (data_buffer & 0xfff) != 0 {
@@ -653,7 +682,7 @@ pub fn tdvmcall_migtd_receive(
 
     let mut args = TdVmcallArgsEx {
         r11: TDVMCALL_MIGTD,
-        r12: TDVMCALL_MIGTD_RECEIVE,
+        r12: migtdleafval.into(),
         r13: mig_request_id,
         r14: data_buffer_length,
         r15: data_buffer,
